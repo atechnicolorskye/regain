@@ -74,7 +74,10 @@ def objective(n_samples, S, K, Z_0, Z_1, Z_2, alpha, beta, psi):
     if isinstance(beta, np.ndarray):
         obj += sum(b[0][0] * m for b, m in zip(beta, map(psi, Z_2 - Z_1)))
     else:
-        obj += beta * sum(map(psi, Z_2 - Z_1))
+        try:
+            obj += beta * sum(map(psi, Z_2 - Z_1))
+        except TypeError:
+            pass
 
     return obj
 
@@ -256,18 +259,17 @@ def time_graphical_lasso(
         #     break
 
         if 'kernel' in psi_name:
-             check = convergence(
-            obj=obj,
-            rnorm=rnorm,
-            snorm=snorm,
-            e_pri=np.sqrt(K.size) * tol + rtol * max(
-                np.sqrt(
-                    squared_norm(Z_0)),
-                np.sqrt(
-                    squared_norm(K))),
-            e_dual=np.sqrt(K.size) * tol + rtol * rho *
-            np.sqrt(squared_norm(U_0)),
-            # precision=Z_0.copy()
+            check = convergence(
+                obj=obj,
+                rnorm=rnorm,
+                snorm=snorm,
+                e_pri=np.sqrt(K.size) * tol + rtol * max(
+                    np.sqrt(
+                        squared_norm(Z_0)),
+                    np.sqrt(
+                        squared_norm(K))),
+                e_dual=np.sqrt(K.size) * tol + rtol * rho *
+                    np.sqrt(squared_norm(U_0)),
             )
         else:
             check = convergence(
@@ -281,7 +283,7 @@ def time_graphical_lasso(
                         squared_norm(K) + squared_norm(K[:-1]) +
                         squared_norm(K[1:]))),
                 e_dual=np.sqrt(K.size + 2 * Z_1.size) * tol + rtol * rho *
-                np.sqrt(squared_norm(U_0) + squared_norm(U_1) + squared_norm(U_2)),
+                    np.sqrt(squared_norm(U_0) + squared_norm(U_1) + squared_norm(U_2)),
                 # precision=Z_0.copy()
             )
 
