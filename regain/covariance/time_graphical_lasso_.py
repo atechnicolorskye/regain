@@ -62,7 +62,7 @@ def loss(S, K, n_samples=None):
         for emp_cov, precision, ni in zip(S, K, n_samples))
 
 
-def objective(n_samples, S, K, Z_0, Z_1, Z_2, alpha, beta, psi, weights):
+def objective(n_samples, S, K, Z_0, Z_1, Z_2, alpha, beta, psi):
     """Objective function for time-varying graphical lasso."""
     obj = loss(S, K, n_samples=n_samples)
 
@@ -74,10 +74,7 @@ def objective(n_samples, S, K, Z_0, Z_1, Z_2, alpha, beta, psi, weights):
     if isinstance(beta, np.ndarray):
         obj += sum(b[0][0] * m for b, m in zip(beta, map(psi, Z_2 - Z_1)))
     else:
-        if weights is not None:
-            obj += beta * psi(weights, S, Z_1)
-        else:
-            obj += beta * sum(map(psi, Z_2 - Z_1))
+        obj += beta * sum(map(psi, Z_2 - Z_1))
 
     return obj
 
@@ -147,36 +144,38 @@ def time_graphical_lasso(
         for i in range(1, emp_cov.shape[0]):
             weights += np.eye(emp_cov.shape[0], k=i) * np.exp(-gamma * i ** 2) 
         weights = weights + weights.T
-        # emp_cov += beta / emp_cov.shape[0] * np.einsum('kl, lij -> kij', weights, emp_cov)
-        # beta = 0
-    else:
-        weights = None
+        emp_cov += beta / emp_cov.shape[0] * np.einsum('kl, lij -> kij', weights, emp_cov)
+        beta = 0
+    # else:
+    #     weights = None
 
     Z_0 = init_precision(emp_cov, mode=init)
     if 'kernel' in psi_name:
-        Z_1 = Z_0.copy()
+        Z_1 = 0.
         Z_2 = 0.    
     else:
         Z_1 = Z_0.copy()[:-1]  # np.zeros_like(emp_cov)[:-1]
         Z_2 = Z_0.copy()[1:]  # np.zeros_like(emp_cov)[1:]
 
     U_0 = np.zeros_like(Z_0)
-    U_1 = np.zeros_like(Z_1)
     if 'kernel' in psi_name:
+        U_1 = 0.
         U_2 = 0.
     else:
+        U_1 = np.zeros_like(Z_1)
         U_2 = np.zeros_like(Z_2)
 
     Z_0_old = np.zeros_like(Z_0)
-    Z_1_old = np.zeros_like(Z_1)
     if 'kernel' in psi_name:
+        Z_1_old = 0.
         Z_2_old = 0.
     else:
+        Z_1_old = np.zeros_like(Z_1)
         Z_2_old = np.zeros_like(Z_2)
 
     # divisor for consensus variables, accounting for two less matrices for t = 0 and t = T
     if 'kernel' in psi_name:
-        divisor = np.full(emp_cov.shape[0], 2, dtype=float)
+        divisor = np.full(emp_cov.shape[0], 1, dtype=float)
     else:
         divisor = np.full(emp_cov.shape[0], 3, dtype=float)
         divisor[0] -= 1
@@ -188,14 +187,12 @@ def time_graphical_lasso(
     checks = [
         convergence(
             obj=objective(
-                n_samples, emp_cov, Z_0, Z_0, Z_1, Z_2, alpha, beta, psi, weights))
+                n_samples, emp_cov, Z_0, Z_0, Z_1, Z_2, alpha, beta, psi))
     ]
     for iteration_ in range(max_iter):
         # update K
         A = Z_0 - U_0
-        if 'kernel' in psi_name:
-            A += Z_1 - U_1
-        else:
+        if 'kernel' not in psi_name:
             A[:-1] += Z_1 - U_1
             A[1:] += Z_2 - U_2
         A /= divisor[:, None, None]
@@ -220,10 +217,7 @@ def time_graphical_lasso(
         Z_0 = soft_thresholding(A, lamda=alpha / rho)
 
         # other Zs
-        if 'kernel' in psi_name:
-            A_1 = K + U_1  
-            Z_1 = prox_psi(weights, A_1, emp_cov, lamda=beta / rho)
-        else:
+        if 'kernel' not in psi_name:
             A_1 = K[:-1] + U_1
             A_2 = K[1:] + U_2
             if not psi_node_penalty:
@@ -237,30 +231,24 @@ def time_graphical_lasso(
 
         # update residuals
         U_0 += K - Z_0
-        if 'kernel' in psi_name:
-            U_1 += K - Z_1
-        else:
+        if 'kernel' not in psi_name:
             U_1 += K[:-1] - Z_1
             U_2 += K[1:] - Z_2
 
         # diagnostics, reporting, termination checks
         if 'kernel' in psi_name:
-            rnorm = np.sqrt(
-                squared_norm(K - Z_0) + squared_norm(K - Z_1))
-
-            snorm = rho * np.sqrt(
-                squared_norm(Z_0 - Z_0_old) + squared_norm(Z_1 - Z_1_old))
+            rnorm = np.sqrt(squared_norm(K - Z_0))
+            snorm = rho * np.sqrt( squared_norm(Z_0 - Z_0_old))
         else:
             rnorm = np.sqrt(
                 squared_norm(K - Z_0) + squared_norm(K[:-1] - Z_1) +
                 squared_norm(K[1:] - Z_2))
-
             snorm = rho * np.sqrt(
                 squared_norm(Z_0 - Z_0_old) + squared_norm(Z_1 - Z_1_old) +
                 squared_norm(Z_2 - Z_2_old))
 
         obj = objective(
-            n_samples, emp_cov, Z_0, K, Z_1, Z_2, alpha, beta, psi, weights) \
+            n_samples, emp_cov, Z_0, K, Z_1, Z_2, alpha, beta, psi) \
             if compute_objective else np.nan
 
         # if np.isinf(obj):
@@ -268,18 +256,19 @@ def time_graphical_lasso(
         #     break
 
         if 'kernel' in psi_name:
-            check = convergence(
-                obj=obj,
-                rnorm=rnorm,
-                snorm=snorm,
-                e_pri=np.sqrt(K.size) * tol + rtol * max(
-                    np.sqrt(
-                        squared_norm(Z_0) + squared_norm(Z_1)),
-                    np.sqrt(
-                        squared_norm(K))),
-                e_dual=np.sqrt(K.size) * tol + rtol * rho *
-                np.sqrt(squared_norm(U_0) + squared_norm(U_1) + squared_norm(U_2)),
-                )
+             check = convergence(
+            obj=obj,
+            rnorm=rnorm,
+            snorm=snorm,
+            e_pri=np.sqrt(K.size) * tol + rtol * max(
+                np.sqrt(
+                    squared_norm(Z_0)),
+                np.sqrt(
+                    squared_norm(K))),
+            e_dual=np.sqrt(K.size) * tol + rtol * rho *
+            np.sqrt(squared_norm(U_0)),
+            # precision=Z_0.copy()
+            )
         else:
             check = convergence(
                 obj=obj,
@@ -294,11 +283,12 @@ def time_graphical_lasso(
                 e_dual=np.sqrt(K.size + 2 * Z_1.size) * tol + rtol * rho *
                 np.sqrt(squared_norm(U_0) + squared_norm(U_1) + squared_norm(U_2)),
                 # precision=Z_0.copy()
-                )
+            )
+
 
         Z_0_old = Z_0.copy()
-        Z_1_old = Z_1.copy()
         if 'kernel' not in psi_name:
+            Z_1_old = Z_1.copy()
             Z_2_old = Z_2.copy()
 
         if verbose:
@@ -319,8 +309,8 @@ def time_graphical_lasso(
             **(update_rho_options or {}))
         # scaled dual variables should be also rescaled
         U_0 *= rho / rho_new
-        U_1 *= rho / rho_new
         if 'kernel' not in psi_name:
+            U_1 *= rho / rho_new
             U_2 *= rho / rho_new
         rho = rho_new
 
