@@ -37,9 +37,9 @@ import scipy.sparse as sp
 from sklearn.utils.extmath import squared_norm
 from sklearn.utils.validation import check_array
 
-from regain.norm import l1_norm, node_penalty
+from regain.norm import l1_norm, node_penalty, kernel_weighted_penalty
 from regain.prox import (
-    blockwise_soft_thresholding, prox_laplacian, prox_linf, prox_node_penalty,
+    blockwise_soft_thresholding, prox_laplacian, prox_linf, prox_node_penalty, prox_kernel,
     soft_thresholding)
 
 
@@ -60,6 +60,9 @@ def check_norm_prox(function):
     elif function == 'node':
         prox = prox_node_penalty
         norm = node_penalty
+    elif 'kernel' in function:
+        prox = prox_kernel
+        norm = kernel_weighted_penalty
     else:
         raise ValueError("Value of %s not understood." % function)
     return norm, prox, function == 'node'

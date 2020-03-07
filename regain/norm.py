@@ -62,4 +62,6 @@ def node_penalty(X):
     except ValueError:
         res = np.nan
 
-    return res
+def kernel_weighted_penalty(weights, emp_cov, Z_1):
+    """Kernel weighted penalty. See Song et. al for details."""
+    return np.sum(weights * np.einsum("kij,lji->kl", emp_cov, Z_1))

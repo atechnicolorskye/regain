@@ -330,3 +330,6 @@ def prox_FL(
     #             partial(tv1_1d, w=beta)), 1, x)
     # # return np.array(np.vsplit(x, x.shape[1])).transpose((2, 1, 0))
     # Z = np.array(np.vsplit(x, a.shape[1]))#.transpose((2, 1, 0))
+
+def prox_kernel(weights, A, emp_cov, lamda):
+    return A + lamda * np.einsum('kl, lij -> kij', weights, emp_cov)
