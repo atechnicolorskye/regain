@@ -267,20 +267,35 @@ def time_graphical_lasso(
         #     Z_0 = Z_0_old
         #     break
 
-        check = convergence(
-            obj=obj,
-            rnorm=rnorm,
-            snorm=snorm,
-            e_pri=np.sqrt(K.size + 2 * Z_1.size) * tol + rtol * max(
-                np.sqrt(
-                    squared_norm(Z_0) + squared_norm(Z_1) + squared_norm(Z_2)),
-                np.sqrt(
-                    squared_norm(K) + squared_norm(K[:-1]) +
-                    squared_norm(K[1:]))),
-            e_dual=np.sqrt(K.size + 2 * Z_1.size) * tol + rtol * rho *
-            np.sqrt(squared_norm(U_0) + squared_norm(U_1) + squared_norm(U_2)),
-            # precision=Z_0.copy()
-        )
+        if 'kernel' in psi_name:
+            check = convergence(
+                obj=obj,
+                rnorm=rnorm,
+                snorm=snorm,
+                e_pri=np.sqrt(K.size) * tol + rtol * max(
+                    np.sqrt(
+                        squared_norm(Z_0) + squared_norm(Z_1)),
+                    np.sqrt(
+                        squared_norm(K))),
+                e_dual=np.sqrt(K.size) * tol + rtol * rho *
+                np.sqrt(squared_norm(U_0) + squared_norm(U_1) + squared_norm(U_2)),
+                )
+        else:
+            check = convergence(
+                obj=obj,
+                rnorm=rnorm,
+                snorm=snorm,
+                e_pri=np.sqrt(K.size + 2 * Z_1.size) * tol + rtol * max(
+                    np.sqrt(
+                        squared_norm(Z_0) + squared_norm(Z_1) + squared_norm(Z_2)),
+                    np.sqrt(
+                        squared_norm(K) + squared_norm(K[:-1]) +
+                        squared_norm(K[1:]))),
+                e_dual=np.sqrt(K.size + 2 * Z_1.size) * tol + rtol * rho *
+                np.sqrt(squared_norm(U_0) + squared_norm(U_1) + squared_norm(U_2)),
+                # precision=Z_0.copy()
+                )
+
         Z_0_old = Z_0.copy()
         Z_1_old = Z_1.copy()
         if 'kernel' not in psi_name:
